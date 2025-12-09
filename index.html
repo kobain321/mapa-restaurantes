@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Mi Mapa de Restaurantes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#ffffff">
+  
+  <!-- iOS PWA -->
+  <link rel="apple-touch-icon" href="icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <!-- Firebase (opcional) -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+
+  <style>
+    body { margin: 0; font-family: sans-serif; }
+    #map { height: 100vh; }
+    #panel {
+      position: fixed;
+      top: 0; right: 0;
+      width: 260px; height: 100%;
+      background: white; overflow-y: auto;
+      padding: 15px;
+      box-shadow: -3px 0 10px rgba(0,0,0,0.2);
+    }
+    #btnMiPos {
+      position: absolute;
+      bottom: 20px; left: 20px;
+      z-index: 1000;
+      background: white;
+      border-radius: 8px;
+      padding: 10px 15px;
+      box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+      font-size: 14px;
+    }
+    .lugar-item {
+      border-bottom: 1px solid #ddd;
+      padding: 8px 0;
+    }
+    .btn-borrar {
+      background: red; color: white;
+      padding: 2px 6px; border: none;
+      border-radius: 4px; cursor: pointer;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+<button id="btnMiPos">📍 Ir a mi ubicación</button>
+
+<div id="panel">
+  <h2>Mis lugares</h2>
+  <div id="listaLugares"></div>
+</div>
+
+<script>
+/* ---------------------------------------------------
+   REGISTRO DEL SERVICE WORKER (PWA)
+--------------------------------------------------- */
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
+}
+
+
+/* ---------------------------------------------------
+   FIREBASE (opcional)
+--------------------------------------------------- */
+const firebaseConfig = {
+  apiKey: "",
+  authDomain: "",
+  projectId: "",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: ""
+};
+
+let db = null;
+if (firebaseConfig.apiKey !== "") {
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+}
+
+
+/* ---------------------------------------------------
+   MAPA E ICONO
+--------------------------------------------------- */
+const iconoRestaurante = L.icon({
+  iconUrl: "https://cdn-icons-png.flaticon.com/512/857/857681.png",
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
+  popupAnchor: [0, -32]
+});
+
+const map = L.map('map').setView([40.4168, -3.7038], 13);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19
+}).addTo(map);
+
+
+/* ---------------------------------------------------
+   GUARDADO LOCAL
+--------------------------------------------------- */
+let lugares = JSON.parse(localStorage.getItem("lugares")) || [];
+
+
+/* ---------------------------------------------------
+   LISTA LATERAL
+--------------------------------------------------- */
+function actualizarLista() {
+  const cont = document.getElementById("listaLugares");
+  cont.innerHTML = "";
+  lugares.forEach((lugar, i) => {
+    cont.innerHTML += `
+      <div class="lugar-item">
+        <strong>${lugar.nombre}</strong><br>
+        <button class="btn-borrar" onclick="borrarLugar(${i})">Eliminar</button>
+      </div>
+    `;
+  });
+}
+
+
+/* ---------------------------------------------------
+   MAPA: MOSTRAR LUGARES
+--------------------------------------------------- */
+let markers = [];
+function mostrarLugaresMapa() {
+  markers.forEach(m => map.removeLayer(m));
+  markers = [];
+  lugares.forEach(l => {
+    const m = L.marker([l.lat, l.lng], { icon: iconoRestaurante })
+      .addTo(map).bindPopup(l.nombre);
+    markers.push(m);
+  });
+}
+
+
+/* ---------------------------------------------------
+   BORRAR LUGAR
+--------------------------------------------------- */
+function borrarLugar(i) {
+  lugares.splice(i, 1);
+  localStorage.setItem("lugares", JSON.stringify(lugares));
+  actualizarLista();
+  mostrarLugaresMapa();
+  if (db) db.collection("lugares").doc("lista").set({ lugares });
+}
+
+
+/* ---------------------------------------------------
+   AÑADIR LUGAR AL CLIC
+--------------------------------------------------- */
+map.on("click", function(e) {
+  const nombre = prompt("Nombre del restaurante:");
+  if (!nombre) return;
+  const lugar = { nombre, lat: e.latlng.lat, lng: e.latlng.lng };
+  lugares.push(lugar);
+  localStorage.setItem("lugares", JSON.stringify(lugares));
+  actualizarLista();
+  mostrarLugaresMapa();
+  if (db) db.collection("lugares").doc("lista").set({ lugares });
+});
+
+
+/* ---------------------------------------------------
+   BOTÓN: MI POSICIÓN
+--------------------------------------------------- */
+document.getElementById("btnMiPos").onclick = () => {
+  navigator.geolocation.getCurrentPosition(pos => {
+    const { latitude, longitude } = pos.coords;
+    map.setView([latitude, longitude], 15);
+    L.marker([latitude, longitude]).addTo(map)
+      .bindPopup("Estás aquí");
+  });
+};
+
+
+actualizarLista();
+mostrarLugaresMapa();
+</script>
+
+</body>
+</html>
