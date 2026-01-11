@@ -1,196 +1,172 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Mi Mapa de Restaurantes</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  
-  <!-- PWA -->
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#ffffff">
-  
-  <!-- iOS PWA -->
-  <link rel="apple-touch-icon" href="icon.png">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta charset="UTF-8">
+    <title>Mapa de Restaurantes</title>
 
-  <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <!-- CSS de Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 
-  <!-- Firebase (opcional) -->
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <!-- Estilos propios -->
+    <style>
+        body { margin: 0; display: flex; }
 
-  <style>
-    body { margin: 0; font-family: sans-serif; }
-    #map { height: 100vh; }
-    #panel {
-      position: fixed;
-      top: 0; right: 0;
-      width: 260px; height: 100%;
-      background: white; overflow-y: auto;
-      padding: 15px;
-      box-shadow: -3px 0 10px rgba(0,0,0,0.2);
-    }
-    #btnMiPos {
-      position: absolute;
-      bottom: 20px; left: 20px;
-      z-index: 1000;
-      background: white;
-      border-radius: 8px;
-      padding: 10px 15px;
-      box-shadow: 0 3px 6px rgba(0,0,0,0.3);
-      font-size: 14px;
-    }
-    .lugar-item {
-      border-bottom: 1px solid #ddd;
-      padding: 8px 0;
-    }
-    .btn-borrar {
-      background: red; color: white;
-      padding: 2px 6px; border: none;
-      border-radius: 4px; cursor: pointer;
-      font-size: 12px;
-    }
-  </style>
+        /* Panel lateral */
+        #sidebar {
+            width: 300px;
+            background: #fafafa;
+            padding: 20px;
+            border-right: 1px solid #ddd;
+            font-family: sans-serif;
+        }
+        #sidebar h2 { margin-top: 0; }
+        .restaurant-item {
+            padding: 8px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+        }
+        .restaurant-item:hover {
+            background: #eee;
+        }
+
+        /* Mapa */
+        #map {
+            flex-grow: 1;
+            height: 100vh;
+        }
+    </style>
 </head>
 <body>
 
-<div id="map"></div>
-<button id="btnMiPos">📍 Ir a mi ubicación</button>
+    <!-- PANEL LATERAL -->
+    <div id="sidebar">
+        <h2>Restaurantes</h2>
 
-<div id="panel">
-  <h2>Mis lugares</h2>
-  <div id="listaLugares"></div>
-</div>
+        <input type="text" id="search" placeholder="Buscar por nombre..." style="width:100%; margin-bottom: 10px;">
 
-<script>
-/* ---------------------------------------------------
-   REGISTRO DEL SERVICE WORKER (PWA)
---------------------------------------------------- */
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js");
-}
+        <select id="categoryFilter" style="width:100%; margin-bottom: 15px;">
+            <option value="">Todas</option>
+            <option value="pizza">Pizza</option>
+            <option value="japonesa">Japonesa</option>
+            <option value="tapas">Tapas</option>
+            <option value="hamburguesas">Hamburguesas</option>
+        </select>
 
+        <div id="restaurantList"></div>
+    </div>
 
-/* ---------------------------------------------------
-   FIREBASE (opcional)
---------------------------------------------------- */
-const firebaseConfig = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: ""
-};
+    <!-- MAPA -->
+    <div id="map"></div>
 
-let db = null;
-if (firebaseConfig.apiKey !== "") {
-  firebase.initializeApp(firebaseConfig);
-  db = firebase.firestore();
-}
+    <!-- JS de Leaflet -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
+    <!-- Script principal -->
+    <script>
 
-/* ---------------------------------------------------
-   MAPA E ICONO
---------------------------------------------------- */
-const iconoRestaurante = L.icon({
-  iconUrl: "https://cdn-icons-png.flaticon.com/512/857/857681.png",
-  iconSize: [32, 32],
-  iconAnchor: [16, 32],
-  popupAnchor: [0, -32]
-});
+        /* ==========================
+           1. DATOS DE RESTAURANTES
+           ========================== */
+        const restaurantes = [
+            {
+                id: 1,
+                nombre: "Pizzería Don Luca",
+                categoria: "pizza",
+                descripcion: "Auténtica pizza napolitana.",
+                coords: [40.4167, -3.70325]
+            },
+            {
+                id: 2,
+                nombre: "Sakura Sushi",
+                categoria: "japonesa",
+                descripcion: "Sushi fresco y ramen casero.",
+                coords: [40.4183, -3.70577]
+            },
+            {
+                id: 3,
+                nombre: "Bar La Esquina",
+                categoria: "tapas",
+                descripcion: "Tapas tradicionales españolas.",
+                coords: [40.4155, -3.7074]
+            },
+            {
+                id: 4,
+                nombre: "Burger House",
+                categoria: "hamburguesas",
+                descripcion: "Hamburguesas gourmet.",
+                coords: [40.4178, -3.7025]
+            }
+        ];
 
-const map = L.map('map').setView([40.4168, -3.7038], 13);
+        /* ==========================
+           2. INICIALIZAR MAPA
+           ========================== */
+        const map = L.map("map").setView([40.4167, -3.70325], 14);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19
-}).addTo(map);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: "© OpenStreetMap"
+        }).addTo(map);
 
+        const markers = {};
 
-/* ---------------------------------------------------
-   GUARDADO LOCAL
---------------------------------------------------- */
-let lugares = JSON.parse(localStorage.getItem("lugares")) || [];
+        function cargarMarcadores(lista) {
+            Object.values(markers).forEach(m => map.removeLayer(m));
+            lista.forEach(rest => {
+                const marker = L.marker(rest.coords).addTo(map);
+                marker.bindPopup(`
+                    <b>${rest.nombre}</b><br>
+                    <i>${rest.categoria}</i><br>
+                    ${rest.descripcion}
+                `);
+                markers[rest.id] = marker;
+            });
+        }
 
+        cargarMarcadores(restaurantes);
 
-/* ---------------------------------------------------
-   LISTA LATERAL
---------------------------------------------------- */
-function actualizarLista() {
-  const cont = document.getElementById("listaLugares");
-  cont.innerHTML = "";
-  lugares.forEach((lugar, i) => {
-    cont.innerHTML += `
-      <div class="lugar-item">
-        <strong>${lugar.nombre}</strong><br>
-        <button class="btn-borrar" onclick="borrarLugar(${i})">Eliminar</button>
-      </div>
-    `;
-  });
-}
+        /* ==========================
+           3. PANEL LATERAL
+           ========================== */
+        const listEl = document.getElementById("restaurantList");
 
+        function renderLista(lista) {
+            listEl.innerHTML = "";
+            lista.forEach(rest => {
+                const div = document.createElement("div");
+                div.className = "restaurant-item";
+                div.textContent = `${rest.nombre} (${rest.categoria})`;
 
-/* ---------------------------------------------------
-   MAPA: MOSTRAR LUGARES
---------------------------------------------------- */
-let markers = [];
-function mostrarLugaresMapa() {
-  markers.forEach(m => map.removeLayer(m));
-  markers = [];
-  lugares.forEach(l => {
-    const m = L.marker([l.lat, l.lng], { icon: iconoRestaurante })
-      .addTo(map).bindPopup(l.nombre);
-    markers.push(m);
-  });
-}
+                div.onclick = () => {
+                    map.setView(rest.coords, 17);
+                    markers[rest.id].openPopup();
+                };
 
+                listEl.appendChild(div);
+            });
+        }
 
-/* ---------------------------------------------------
-   BORRAR LUGAR
---------------------------------------------------- */
-function borrarLugar(i) {
-  lugares.splice(i, 1);
-  localStorage.setItem("lugares", JSON.stringify(lugares));
-  actualizarLista();
-  mostrarLugaresMapa();
-  if (db) db.collection("lugares").doc("lista").set({ lugares });
-}
+        renderLista(restaurantes);
 
+        /* ==========================
+           4. FILTROS
+           ========================== */
+        function filtrar() {
+            const texto = document.getElementById("search").value.toLowerCase();
+            const categoria = document.getElementById("categoryFilter").value;
 
-/* ---------------------------------------------------
-   AÑADIR LUGAR AL CLIC
---------------------------------------------------- */
-map.on("click", function(e) {
-  const nombre = prompt("Nombre del restaurante:");
-  if (!nombre) return;
-  const lugar = { nombre, lat: e.latlng.lat, lng: e.latlng.lng };
-  lugares.push(lugar);
-  localStorage.setItem("lugares", JSON.stringify(lugares));
-  actualizarLista();
-  mostrarLugaresMapa();
-  if (db) db.collection("lugares").doc("lista").set({ lugares });
-});
+            const filtrados = restaurantes.filter(r =>
+                r.nombre.toLowerCase().includes(texto) &&
+                (categoria === "" || r.categoria === categoria)
+            );
 
+            renderLista(filtrados);
+            cargarMarcadores(filtrados);
+        }
 
-/* ---------------------------------------------------
-   BOTÓN: MI POSICIÓN
---------------------------------------------------- */
-document.getElementById("btnMiPos").onclick = () => {
-  navigator.geolocation.getCurrentPosition(pos => {
-    const { latitude, longitude } = pos.coords;
-    map.setView([latitude, longitude], 15);
-    L.marker([latitude, longitude]).addTo(map)
-      .bindPopup("Estás aquí");
-  });
-};
+        document.getElementById("search").addEventListener("input", filtrar);
+        document.getElementById("categoryFilter").addEventListener("change", filtrar);
 
-
-actualizarLista();
-mostrarLugaresMapa();
-</script>
-
+    </script>
 </body>
 </html>
+
