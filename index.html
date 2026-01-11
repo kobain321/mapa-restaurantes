@@ -3,28 +3,41 @@
 <head>
 <meta charset="UTF-8">
 <title>Mapa de Restaurantes</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 <style>
-body { margin:0; display:flex; font-family:"Segoe UI", sans-serif; }
-#sidebar { width:320px; background:linear-gradient(180deg,#fff,#f2f2f2); padding:20px; border-right:1px solid #ddd; overflow-y:auto; }
+body { margin:0; display:flex; font-family:"Segoe UI", sans-serif; height:100vh; }
+#sidebar {
+    width:320px; max-width:80vw;
+    background:linear-gradient(180deg,#fff,#f2f2f2);
+    padding:20px; border-right:1px solid #ddd;
+    overflow-y:auto; transition:margin-left 0.3s;
+    z-index:100;
+}
+#sidebar.hidden { margin-left:-320px; }
 #sidebar h2 { margin-top:0;color:#e63946; }
 input,select,button { width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; margin-bottom:10px; }
 button { cursor:pointer; }
 .restaurant-item { padding:8px; cursor:pointer; border-radius:6px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; }
 .restaurant-item:hover { background:#e63946; color:white; }
-.restaurant-item span { font-size:18px; margin-left:5px; }
-#map { flex-grow:1; height:100vh; }
+.restaurant-item span { font-size:16px; margin-left:5px; }
+#map { flex-grow:1; height:100vh; transition: margin-left 0.3s; }
 
 /* Botones flotantes */
-#locateBtn,#addRestaurantBtn { position:absolute; right:20px; z-index:1000; border-radius:50%; width:50px; height:50px; font-size:22px; border:none; color:white; }
-#locateBtn { bottom:20px; background:#1d3557; }
+#locateBtn,#addRestaurantBtn,#toggleSidebar {
+    position:absolute; z-index:1000; border-radius:50%; width:50px; height:50px;
+    font-size:22px; border:none; color:white; display:flex; justify-content:center; align-items:center;
+}
+#locateBtn { bottom:20px; right:20px; background:#1d3557; }
 #locateBtn:hover { background:#457b9d; }
-#addRestaurantBtn { bottom:80px; background:#e63946; }
+#addRestaurantBtn { bottom:80px; right:20px; background:#e63946; }
 #addRestaurantBtn:hover { background:#c92c3a; }
+#toggleSidebar { top:20px; left:20px; background:#1d3557; }
+#toggleSidebar:hover { background:#457b9d; }
 
 /* Modal */
 #modalOverlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:2000; }
-#modal { background:#fff; padding:20px; border-radius:12px; width:320px; box-shadow:0 0 20px rgba(0,0,0,0.3); animation:fadeIn 0.3s; }
+#modal { background:#fff; padding:20px; border-radius:12px; width:320px; max-width:90vw; box-shadow:0 0 20px rgba(0,0,0,0.3); animation:fadeIn 0.3s; }
 @keyframes fadeIn { from {opacity:0; transform:scale(0.9);} to {opacity:1; transform:scale(1);} }
 #modal h3 { margin-top:0; color:#e63946; text-align:center; }
 .modal-input { margin-bottom:10px; width:100%; }
@@ -37,22 +50,40 @@ button { cursor:pointer; }
 .popup-content { display:flex; flex-direction:column; font-size:14px; }
 .popup-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
 .popup-icon { font-size:20px; margin-right:5px; }
+
+/* Label sobre marcador */
+.marker-label {
+    background: rgba(255,255,255,0.9);
+    border-radius: 4px; padding: 2px 6px; font-size: 12px;
+    font-weight: bold; color:#e63946; white-space: nowrap; pointer-events:none;
+    text-align:center;
+}
+
+/* Hover animación marcador */
+.custom-marker div { transition: transform 0.2s; }
+.custom-marker-hover div { transform: scale(1.5); }
+
+/* Responsive para móvil */
+@media (max-width: 600px) {
+    #sidebar { width:250px; }
+    #sidebar.hidden { margin-left:-250px; }
+    #toggleSidebar { top:10px; left:10px; width:40px; height:40px; font-size:20px; }
+    #locateBtn,#addRestaurantBtn { width:40px; height:40px; font-size:18px; }
+}
 </style>
 </head>
 <body>
 
 <div id="sidebar">
 <h2>Restaurantes</h2>
-
 <input type="text" id="search" placeholder="Buscar por nombre">
-<select id="categoryFilter">
-    <option value="">Todas</option>
-    <option value="pizza">Pizza 🍕</option>
-    <option value="japonesa">Japonesa 🍣</option>
-    <option value="tapas">Tapas 🍤</option>
-    <option value="hamburguesas">Hamburguesas 🍔</option>
-</select>
-
+<input list="categorias" id="categoryFilter" class="modal-input" placeholder="Filtrar por categoría">
+<datalist id="categorias">
+  <option value="pizza">Pizza 🍕</option>
+  <option value="japonesa">Japonesa 🍣</option>
+  <option value="tapas">Tapas 🍤</option>
+  <option value="hamburguesas">Hamburguesas 🍔</option>
+</datalist>
 <hr>
 <div id="restaurantList"></div>
 </div>
@@ -60,18 +91,14 @@ button { cursor:pointer; }
 <div id="map"></div>
 <button id="locateBtn">📍</button>
 <button id="addRestaurantBtn">➕</button>
+<button id="toggleSidebar">☰</button>
 
 <!-- MODAL -->
 <div id="modalOverlay">
 <div id="modal">
 <h3>Añadir Restaurante</h3>
 <input id="modalName" class="modal-input" placeholder="Nombre">
-<select id="modalCategory" class="modal-input">
-    <option value="pizza">Pizza 🍕</option>
-    <option value="japonesa">Japonesa 🍣</option>
-    <option value="tapas">Tapas 🍤</option>
-    <option value="hamburguesas">Hamburguesas 🍔</option>
-</select>
+<input list="categorias" id="modalCategoryInput" class="modal-input" placeholder="Categoría">
 <input id="modalDesc" class="modal-input" placeholder="Descripción">
 <div id="starContainer" class="modal-input">
     <span data-value="1">☆</span>
@@ -100,36 +127,29 @@ const db = firebase.firestore();
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
-let restaurantes=[];
-const markers={};
+let restaurantes=[], markers={}, labels={}, userMarker=null;
 const map=L.map("map").setView([40.4167,-3.70325],14);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{ attribution:"© OpenStreetMap" }).addTo(map);
 
 const search=document.getElementById("search");
 const categoryFilter=document.getElementById("categoryFilter");
+const categoryInput=document.getElementById("modalCategoryInput");
 const listEl=document.getElementById("restaurantList");
 const locateBtn=document.getElementById("locateBtn");
 const addBtn=document.getElementById("addRestaurantBtn");
+const toggleSidebarBtn=document.getElementById("toggleSidebar");
+const sidebar=document.getElementById("sidebar");
 
 const modalOverlay=document.getElementById("modalOverlay");
 const modalName=document.getElementById("modalName");
-const modalCategory=document.getElementById("modalCategory");
 const modalDesc=document.getElementById("modalDesc");
 const starContainer=document.getElementById("starContainer");
 const modalSave=document.getElementById("modalSave");
 const modalCancel=document.getElementById("modalCancel");
 
-let modoAgregar=false;
-let coordsAgregar=[0,0];
-let ratingSeleccionado=5;
-
-// Iconos por categoría
-const iconos={
-    pizza:"🍕",
-    japonesa:"🍣",
-    tapas:"🍤",
-    hamburguesas:"🍔"
-};
+let modoAgregar=false, coordsAgregar=[0,0], ratingSeleccionado=5;
+const iconos={ pizza:"🍕", japonesa:"🍣", tapas:"🍤", hamburguesas:"🍔" };
+const colores={ pizza:"#ff6347", japonesa:"#1e90ff", tapas:"#ffa500", hamburguesas:"#32cd32" };
 
 // Modal estrellas
 Array.from(starContainer.children).forEach(span=>{
@@ -140,48 +160,52 @@ Array.from(starContainer.children).forEach(span=>{
     };
 });
 
+// Toggle sidebar
+toggleSidebarBtn.onclick=()=>{ sidebar.classList.toggle("hidden"); map.invalidateSize(); };
+
+// Color marcador
+function getColor(categoria){
+    if(!colores[categoria]) colores[categoria]="#"+Math.floor(Math.random()*16777215).toString(16);
+    return colores[categoria];
+}
+
 // Marcar restaurantes
 function cargarMarcadores(lista){
     Object.values(markers).forEach(m=>map.removeLayer(m));
+    Object.values(labels).forEach(l=>map.removeLayer(l));
+
     lista.forEach(r=>{
-        const m=L.marker(r.coords).addTo(map);
+        const color=getColor(r.categoria);
+        const markerIcon=L.divIcon({className:"custom-marker", html:`<div style="background:${color}; width:20px; height:20px; border-radius:50%; border:2px solid white;"></div>`, iconAnchor:[10,10]});
+        const m=L.marker(r.coords,{icon:markerIcon}).addTo(map);
 
-        const popup=document.createElement("div");
-        popup.className="popup-content";
+        // Hover efecto
+        m.on("mouseover",()=>{ m.getElement().classList.add("custom-marker-hover"); m.bindTooltip(r.categoria,{permanent:false,direction:"top"}).openTooltip(); });
+        m.on("mouseout",()=>{ m.getElement().classList.remove("custom-marker-hover"); m.closeTooltip(); });
 
-        const top=document.createElement("div");
-        top.className="popup-top";
+        // Label
+        const l=L.marker(r.coords,{icon:L.divIcon({className:"marker-label",html:r.nombre,iconAnchor:[0,-15]}),interactive:false}).addTo(map);
 
-        const nombre=document.createElement("span");
-        nombre.textContent=`${iconos[r.categoria] || ""} ${r.nombre}`;
-        top.appendChild(nombre);
+        // Popup
+        const popup=document.createElement("div"); popup.className="popup-content";
+        const top=document.createElement("div"); top.className="popup-top";
+        const nombre=document.createElement("span"); nombre.textContent=`${iconos[r.categoria]||""} ${r.nombre}`; top.appendChild(nombre);
 
         const starsDiv=document.createElement("div");
         for(let i=1;i<=5;i++){
-            const s=document.createElement("span");
-            s.innerHTML="☆";
-            s.classList.add("popup-star");
+            const s=document.createElement("span"); s.innerHTML="☆"; s.classList.add("popup-star");
             if(i<=r.rating) s.classList.add("active");
             s.dataset.value=i;
-            s.onclick=(e)=>{ 
-                e.stopPropagation(); 
-                db.collection("restaurantes").doc(r.id).update({rating:i});
-            };
+            s.onclick=(e)=>{ e.stopPropagation(); db.collection("restaurantes").doc(r.id).update({rating:i}); };
             starsDiv.appendChild(s);
         }
         top.appendChild(starsDiv);
-
-        const categoria=document.createElement("i");
-        categoria.textContent=r.categoria;
-        const desc=document.createElement("div");
-        desc.textContent=r.descripcion;
-
-        popup.appendChild(top);
-        popup.appendChild(categoria);
-        popup.appendChild(desc);
-
+        const categoria=document.createElement("i"); categoria.textContent=r.categoria;
+        const desc=document.createElement("div"); desc.textContent=r.descripcion;
+        popup.appendChild(top); popup.appendChild(categoria); popup.appendChild(desc);
         m.bindPopup(popup);
-        markers[r.id]=m;
+
+        markers[r.id]=m; labels[r.id]=l;
     });
 }
 
@@ -191,7 +215,7 @@ function renderLista(lista){
     lista.forEach(r=>{
         const div=document.createElement("div");
         div.className="restaurant-item";
-        div.innerHTML=`<span>${iconos[r.categoria] || ""} ${r.nombre}</span><span>${"⭐".repeat(r.rating)}</span>`;
+        div.innerHTML=`<span>${iconos[r.categoria]||""} ${r.nombre}</span><span>${"⭐".repeat(r.rating)}</span>`;
         div.onclick=()=>{ map.setView(r.coords,17); markers[r.id].openPopup(); };
         listEl.appendChild(div);
     });
@@ -200,59 +224,58 @@ function renderLista(lista){
 // Filtros
 function filtrar(){
     const texto=search.value.toLowerCase();
-    const cat=categoryFilter.value;
-    const filtrados = restaurantes.filter(r=>r.nombre.toLowerCase().includes(texto) && (cat==="" || r.categoria===cat));
+    const cat=categoryFilter.value.toLowerCase();
+    const filtrados = restaurantes.filter(r=>r.nombre.toLowerCase().includes(texto) && (cat==="" || r.categoria.toLowerCase()===cat));
     cargarMarcadores(filtrados);
     renderLista(filtrados);
 }
-
 search.oninput=filtrar;
-categoryFilter.onchange=filtrar;
+categoryFilter.oninput=filtrar;
 
 // Geolocalización
-locateBtn.onclick=()=>{
-    navigator.geolocation.getCurrentPosition(pos=>{ map.setView([pos.coords.latitude,pos.coords.longitude],15); },()=>{alert("No se pudo obtener tu ubicación");});
+locateBtn.onclick = () => {
+    if(!navigator.geolocation){ alert("Tu navegador no soporta geolocalización"); return; }
+    navigator.geolocation.getCurrentPosition(pos=>{
+        const latlng=[pos.coords.latitude,pos.coords.longitude];
+        map.setView(latlng,16);
+        if(userMarker) userMarker.setLatLng(latlng);
+        else{ const blueIcon=L.icon({iconUrl:'https://cdn-icons-png.flaticon.com/512/684/684908.png',iconSize:[32,32],iconAnchor:[16,32]}); userMarker=L.marker(latlng,{icon:blueIcon}).addTo(map);}
+    },()=>{alert("No se pudo obtener tu ubicación");});
 };
 
-// Firebase en tiempo real
+// Firebase tiempo real
 db.collection("restaurantes").onSnapshot(snapshot=>{
     restaurantes=[];
     snapshot.forEach(doc=>restaurantes.push({id:doc.id,...doc.data()}));
     filtrar();
 });
 
-// Agregar restaurante
-addBtn.onclick=()=>{
-    modoAgregar=true;
-    alert("Haz clic en el mapa para colocar el restaurante");
-};
-
+// Añadir restaurante
+addBtn.onclick=()=>{ modoAgregar=true; alert("Haz clic en el mapa para colocar el restaurante"); };
 map.on("click",e=>{
     if(!modoAgregar) return;
     coordsAgregar=[e.latlng.lat,e.latlng.lng];
     modalOverlay.style.display="flex";
 });
 
-// Modal guardar/cancelar
+// Guardar / cancelar modal
 modalSave.onclick=()=>{
-    const nuevo={
-        nombre: modalName.value || "Sin nombre",
-        categoria: modalCategory.value,
-        descripcion: modalDesc.value,
-        rating: ratingSeleccionado,
-        coords: coordsAgregar
-    };
+    const cat=categoryInput.value||categoryInput.placeholder;
+    if(cat && !document.querySelector(`#categorias option[value="${cat}"]`)){
+        const opt=document.createElement("option"); opt.value=cat; document.getElementById("categorias").appendChild(opt);
+    }
+    const nuevo={nombre:modalName.value||"Sin nombre",categoria:cat,descripcion:modalDesc.value,rating:ratingSeleccionado,coords:coordsAgregar};
     db.collection("restaurantes").add(nuevo);
     modalOverlay.style.display="none";
     modalName.value=""; modalDesc.value=""; ratingSeleccionado=5;
     Array.from(starContainer.children).forEach(s=>s.classList.remove("active"));
     modoAgregar=false;
 };
-
 modalCancel.onclick=()=>{ modalOverlay.style.display="none"; modoAgregar=false; };
 </script>
 </body>
 </html>
+
 
 
 
