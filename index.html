@@ -11,7 +11,7 @@ body { margin:0; display:flex; font-family:"Segoe UI", sans-serif; height:100vh;
     width:320px; max-width:80vw;
     background:linear-gradient(180deg,#fff,#f2f2f2);
     padding:20px; border-right:1px solid #ddd;
-    overflow-y:auto; transition:margin-left 0.3s;
+    overflow-y:auto; transition:margin-left 0.4s;
     z-index:100;
 }
 #sidebar.hidden { margin-left:-320px; }
@@ -21,7 +21,9 @@ button { cursor:pointer; }
 .restaurant-item { padding:8px; cursor:pointer; border-radius:6px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; }
 .restaurant-item:hover { background:#e63946; color:white; }
 .restaurant-item span { font-size:16px; margin-left:5px; }
-#map { flex-grow:1; height:100vh; transition: margin-left 0.3s; }
+
+#map { flex-grow:1; height:100vh; transition: margin-left 0.4s, width 0.4s; }
+#map.full { margin-left:0; width:100vw; }
 
 /* Botones flotantes */
 #locateBtn,#addRestaurantBtn,#toggleSidebar {
@@ -49,7 +51,6 @@ button { cursor:pointer; }
 /* Popup estilos */
 .popup-content { display:flex; flex-direction:column; font-size:14px; }
 .popup-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
-.popup-icon { font-size:20px; margin-right:5px; }
 
 /* Label sobre marcador */
 .marker-label {
@@ -160,8 +161,13 @@ Array.from(starContainer.children).forEach(span=>{
     };
 });
 
-// Toggle sidebar
-toggleSidebarBtn.onclick=()=>{ sidebar.classList.toggle("hidden"); map.invalidateSize(); };
+// Toggle sidebar con animación
+toggleSidebarBtn.onclick = () => {
+    sidebar.classList.toggle("hidden");
+    const fullMap = sidebar.classList.contains("hidden");
+    map.getContainer().classList.toggle("full", fullMap);
+    setTimeout(() => map.invalidateSize(), 400);
+};
 
 // Color marcador
 function getColor(categoria){
@@ -179,14 +185,11 @@ function cargarMarcadores(lista){
         const markerIcon=L.divIcon({className:"custom-marker", html:`<div style="background:${color}; width:20px; height:20px; border-radius:50%; border:2px solid white;"></div>`, iconAnchor:[10,10]});
         const m=L.marker(r.coords,{icon:markerIcon}).addTo(map);
 
-        // Hover efecto
         m.on("mouseover",()=>{ m.getElement().classList.add("custom-marker-hover"); m.bindTooltip(r.categoria,{permanent:false,direction:"top"}).openTooltip(); });
         m.on("mouseout",()=>{ m.getElement().classList.remove("custom-marker-hover"); m.closeTooltip(); });
 
-        // Label
         const l=L.marker(r.coords,{icon:L.divIcon({className:"marker-label",html:r.nombre,iconAnchor:[0,-15]}),interactive:false}).addTo(map);
 
-        // Popup
         const popup=document.createElement("div"); popup.className="popup-content";
         const top=document.createElement("div"); top.className="popup-top";
         const nombre=document.createElement("span"); nombre.textContent=`${iconos[r.categoria]||""} ${r.nombre}`; top.appendChild(nombre);
@@ -200,9 +203,14 @@ function cargarMarcadores(lista){
             starsDiv.appendChild(s);
         }
         top.appendChild(starsDiv);
+
         const categoria=document.createElement("i"); categoria.textContent=r.categoria;
         const desc=document.createElement("div"); desc.textContent=r.descripcion;
-        popup.appendChild(top); popup.appendChild(categoria); popup.appendChild(desc);
+
+        const delBtn=document.createElement("button"); delBtn.textContent="Eliminar"; delBtn.style.marginTop="5px";
+        delBtn.onclick=(e)=>{ e.stopPropagation(); if(confirm(`Eliminar ${r.nombre}?`)) db.collection("restaurantes").doc(r.id).delete(); };
+
+        popup.appendChild(top); popup.appendChild(categoria); popup.appendChild(desc); popup.appendChild(delBtn);
         m.bindPopup(popup);
 
         markers[r.id]=m; labels[r.id]=l;
@@ -215,7 +223,12 @@ function renderLista(lista){
     lista.forEach(r=>{
         const div=document.createElement("div");
         div.className="restaurant-item";
-        div.innerHTML=`<span>${iconos[r.categoria]||""} ${r.nombre}</span><span>${"⭐".repeat(r.rating)}</span>`;
+        div.innerHTML=`<span>${iconos[r.categoria]||""} ${r.nombre}</span>
+                       <button style="background:none;border:none;cursor:pointer;">🗑</button>`;
+        div.querySelector("button").onclick=(e)=>{
+            e.stopPropagation();
+            if(confirm(`Eliminar ${r.nombre}?`)) db.collection("restaurantes").doc(r.id).delete();
+        };
         div.onclick=()=>{ map.setView(r.coords,17); markers[r.id].openPopup(); };
         listEl.appendChild(div);
     });
@@ -275,6 +288,7 @@ modalCancel.onclick=()=>{ modalOverlay.style.display="none"; modoAgregar=false; 
 </script>
 </body>
 </html>
+
 
 
 
