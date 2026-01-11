@@ -7,32 +7,70 @@
     <!-- CSS de Leaflet -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 
-    <!-- Estilos propios -->
     <style>
-        body { margin: 0; display: flex; }
+        body {
+            margin: 0;
+            display: flex;
+            font-family: "Segoe UI", sans-serif;
+        }
 
         /* Panel lateral */
         #sidebar {
             width: 300px;
-            background: #fafafa;
+            background: linear-gradient(180deg, #ffffff, #f2f2f2);
             padding: 20px;
             border-right: 1px solid #ddd;
-            font-family: sans-serif;
         }
-        #sidebar h2 { margin-top: 0; }
+
+        #sidebar h2 {
+            margin-top: 0;
+            color: #e63946;
+        }
+
+        #search, #categoryFilter {
+            width: 100%;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            margin-bottom: 10px;
+        }
+
         .restaurant-item {
             padding: 8px;
             cursor: pointer;
-            border-bottom: 1px solid #eee;
+            border-radius: 6px;
+            margin-bottom: 6px;
         }
+
         .restaurant-item:hover {
-            background: #eee;
+            background: #e63946;
+            color: white;
         }
 
         /* Mapa */
         #map {
             flex-grow: 1;
             height: 100vh;
+        }
+
+        /* Botón ubicación */
+        #locateBtn {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: #1d3557;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 22px;
+            cursor: pointer;
+        }
+
+        #locateBtn:hover {
+            background: #457b9d;
         }
     </style>
 </head>
@@ -42,9 +80,9 @@
     <div id="sidebar">
         <h2>Restaurantes</h2>
 
-        <input type="text" id="search" placeholder="Buscar por nombre..." style="width:100%; margin-bottom: 10px;">
+        <input type="text" id="search" placeholder="Buscar por nombre...">
 
-        <select id="categoryFilter" style="width:100%; margin-bottom: 15px;">
+        <select id="categoryFilter">
             <option value="">Todas</option>
             <option value="pizza">Pizza</option>
             <option value="japonesa">Japonesa</option>
@@ -58,12 +96,13 @@
     <!-- MAPA -->
     <div id="map"></div>
 
+    <!-- BOTÓN UBICACIÓN -->
+    <button id="locateBtn">📍</button>
+
     <!-- JS de Leaflet -->
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-    <!-- Script principal -->
     <script>
-
         /* ==========================
            1. DATOS DE RESTAURANTES
            ========================== */
@@ -99,7 +138,7 @@
         ];
 
         /* ==========================
-           2. INICIALIZAR MAPA
+           2. MAPA
            ========================== */
         const map = L.map("map").setView([40.4167, -3.70325], 14);
 
@@ -111,6 +150,7 @@
 
         function cargarMarcadores(lista) {
             Object.values(markers).forEach(m => map.removeLayer(m));
+
             lista.forEach(rest => {
                 const marker = L.marker(rest.coords).addTo(map);
                 marker.bindPopup(`
@@ -125,12 +165,13 @@
         cargarMarcadores(restaurantes);
 
         /* ==========================
-           3. PANEL LATERAL
+           3. LISTA LATERAL
            ========================== */
         const listEl = document.getElementById("restaurantList");
 
         function renderLista(lista) {
             listEl.innerHTML = "";
+
             lista.forEach(rest => {
                 const div = document.createElement("div");
                 div.className = "restaurant-item";
@@ -166,7 +207,35 @@
         document.getElementById("search").addEventListener("input", filtrar);
         document.getElementById("categoryFilter").addEventListener("change", filtrar);
 
+        /* ==========================
+           5. GEOLOCALIZACIÓN
+           ========================== */
+        let userMarker = null;
+
+        document.getElementById("locateBtn").addEventListener("click", () => {
+            if (!navigator.geolocation) {
+                alert("Tu navegador no soporta geolocalización");
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const lat = pos.coords.latitude;
+                    const lng = pos.coords.longitude;
+
+                    if (userMarker) map.removeLayer(userMarker);
+
+                    userMarker = L.marker([lat, lng]).addTo(map)
+                        .bindPopup("📍 Estás aquí");
+
+                    map.setView([lat, lng], 15);
+                    userMarker.openPopup();
+                },
+                () => alert("No se pudo obtener tu ubicación")
+            );
+        });
     </script>
 </body>
 </html>
+
 
