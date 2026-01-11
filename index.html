@@ -161,7 +161,7 @@ Array.from(starContainer.children).forEach(span=>{
     };
 });
 
-// Toggle sidebar con animación
+// Toggle sidebar animado
 toggleSidebarBtn.onclick = () => {
     sidebar.classList.toggle("hidden");
     const fullMap = sidebar.classList.contains("hidden");
@@ -175,7 +175,7 @@ function getColor(categoria){
     return colores[categoria];
 }
 
-// Marcar restaurantes
+// Cargar marcadores y labels
 function cargarMarcadores(lista){
     Object.values(markers).forEach(m=>map.removeLayer(m));
     Object.values(labels).forEach(l=>map.removeLayer(l));
