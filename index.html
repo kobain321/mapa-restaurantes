@@ -7,13 +7,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 <style>
 body { margin:0; display:flex; font-family:"Segoe UI", sans-serif; height:100vh; }
-#sidebar {
-    width:320px; max-width:80vw;
-    background:linear-gradient(180deg,#fff,#f2f2f2);
-    padding:20px; border-right:1px solid #ddd;
-    overflow-y:auto; transition:margin-left 0.4s;
-    z-index:100;
-}
+#sidebar { width:320px; max-width:80vw; background:linear-gradient(180deg,#fff,#f2f2f2); padding:20px; border-right:1px solid #ddd; overflow-y:auto; transition:margin-left 0.4s; z-index:100; }
 #sidebar.hidden { margin-left:-320px; }
 #sidebar h2 { margin-top:0;color:#e63946; }
 input,select,button { width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; margin-bottom:10px; }
@@ -21,15 +15,11 @@ button { cursor:pointer; }
 .restaurant-item { padding:8px; cursor:pointer; border-radius:6px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; }
 .restaurant-item:hover { background:#e63946; color:white; }
 .restaurant-item span { font-size:16px; margin-left:5px; }
-
 #map { flex-grow:1; height:100vh; transition: margin-left 0.4s, width 0.4s; }
 #map.full { margin-left:0; width:100vw; }
 
 /* Botones flotantes */
-#locateBtn,#addRestaurantBtn,#toggleSidebar {
-    position:absolute; z-index:1000; border-radius:50%; width:50px; height:50px;
-    font-size:22px; border:none; color:white; display:flex; justify-content:center; align-items:center;
-}
+#locateBtn,#addRestaurantBtn,#toggleSidebar { position:absolute; z-index:1000; border-radius:50%; width:50px; height:50px; font-size:22px; border:none; color:white; display:flex; justify-content:center; align-items:center; }
 #locateBtn { bottom:20px; right:20px; background:#1d3557; }
 #locateBtn:hover { background:#457b9d; }
 #addRestaurantBtn { bottom:80px; right:20px; background:#e63946; }
@@ -53,13 +43,7 @@ button { cursor:pointer; }
 .popup-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
 
 /* Label sobre marcador */
-.marker-label {
-    background: rgba(255,255,255,0.9);
-    border-radius: 4px; padding: 2px 6px; font-size: 12px;
-    font-weight: bold; color:#e63946; white-space: nowrap; pointer-events:none;
-    text-align:center;
-}
-
+.marker-label { background: rgba(255,255,255,0.9); border-radius: 4px; padding: 2px 6px; font-size: 12px; font-weight: bold; color:#e63946; white-space: nowrap; pointer-events:none; text-align:center; }
 /* Hover animación marcador */
 .custom-marker div { transition: transform 0.2s; }
 .custom-marker-hover div { transform: scale(1.5); }
@@ -113,22 +97,27 @@ button { cursor:pointer; }
 </div>
 </div>
 
-<!-- Firebase -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script>
-const firebaseConfig = {
-  apiKey: "TU_API_KEY",
-  authDomain: "TU_PROJECT.firebaseapp.com",
-  projectId: "TU_PROJECT_ID"
-};
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-</script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+import { getFirestore, collection, addDoc, doc, onSnapshot, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyC27QBP2YOCglfsZGpGYS17qFA78njnLxY",
+  authDomain: "mapa-restaurantes-c9088.firebaseapp.com",
+  projectId: "mapa-restaurantes-c9088",
+  storageBucket: "mapa-restaurantes-c9088.firebasestorage.app",
+  messagingSenderId: "955158336278",
+  appId: "1:955158336278:web:26c360d64f8b09f6933637"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// ---------- VARIABLES GLOBALES ----------
 let restaurantes=[], markers={}, labels={}, userMarker=null;
+const iconos={ pizza:"🍕", japonesa:"🍣", tapas:"🍤", hamburguesas:"🍔" };
+const colores={ pizza:"#ff6347", japonesa:"#1e90ff", tapas:"#ffa500", hamburguesas:"#32cd32" };
+
 const map=L.map("map").setView([40.4167,-3.70325],14);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{ attribution:"© OpenStreetMap" }).addTo(map);
 
@@ -149,37 +138,16 @@ const modalSave=document.getElementById("modalSave");
 const modalCancel=document.getElementById("modalCancel");
 
 let modoAgregar=false, coordsAgregar=[0,0], ratingSeleccionado=5;
-const iconos={ pizza:"🍕", japonesa:"🍣", tapas:"🍤", hamburguesas:"🍔" };
-const colores={ pizza:"#ff6347", japonesa:"#1e90ff", tapas:"#ffa500", hamburguesas:"#32cd32" };
 
-// Modal estrellas
-Array.from(starContainer.children).forEach(span=>{
-    span.onclick=()=>{
-        ratingSeleccionado=parseInt(span.dataset.value);
-        Array.from(starContainer.children).forEach(s=>s.classList.remove("active"));
-        Array.from(starContainer.children).forEach(s=>{ if(parseInt(s.dataset.value)<=ratingSeleccionado) s.classList.add("active"); });
-    };
-});
-
-// Toggle sidebar animado
-toggleSidebarBtn.onclick = () => {
-    sidebar.classList.toggle("hidden");
-    const fullMap = sidebar.classList.contains("hidden");
-    map.getContainer().classList.toggle("full", fullMap);
-    setTimeout(() => map.invalidateSize(), 400);
-};
-
-// Color marcador
+// ---------- FUNCIONES ----------
 function getColor(categoria){
     if(!colores[categoria]) colores[categoria]="#"+Math.floor(Math.random()*16777215).toString(16);
     return colores[categoria];
 }
 
-// Cargar marcadores y labels
 function cargarMarcadores(lista){
     Object.values(markers).forEach(m=>map.removeLayer(m));
     Object.values(labels).forEach(l=>map.removeLayer(l));
-
     lista.forEach(r=>{
         const color=getColor(r.categoria);
         const markerIcon=L.divIcon({className:"custom-marker", html:`<div style="background:${color}; width:20px; height:20px; border-radius:50%; border:2px solid white;"></div>`, iconAnchor:[10,10]});
@@ -199,7 +167,7 @@ function cargarMarcadores(lista){
             const s=document.createElement("span"); s.innerHTML="☆"; s.classList.add("popup-star");
             if(i<=r.rating) s.classList.add("active");
             s.dataset.value=i;
-            s.onclick=(e)=>{ e.stopPropagation(); db.collection("restaurantes").doc(r.id).update({rating:i}); };
+            s.onclick=async (e)=>{ e.stopPropagation(); await updateDoc(doc(db,"restaurantes",r.id), { rating:i }); };
             starsDiv.appendChild(s);
         }
         top.appendChild(starsDiv);
@@ -208,7 +176,7 @@ function cargarMarcadores(lista){
         const desc=document.createElement("div"); desc.textContent=r.descripcion;
 
         const delBtn=document.createElement("button"); delBtn.textContent="Eliminar"; delBtn.style.marginTop="5px";
-        delBtn.onclick=(e)=>{ e.stopPropagation(); if(confirm(`Eliminar ${r.nombre}?`)) db.collection("restaurantes").doc(r.id).delete(); };
+        delBtn.onclick=async (e)=>{ e.stopPropagation(); if(confirm(`Eliminar ${r.nombre}?`)) await deleteDoc(doc(db,"restaurantes",r.id)); };
 
         popup.appendChild(top); popup.appendChild(categoria); popup.appendChild(desc); popup.appendChild(delBtn);
         m.bindPopup(popup);
@@ -217,7 +185,6 @@ function cargarMarcadores(lista){
     });
 }
 
-// Lista lateral
 function renderLista(lista){
     listEl.innerHTML="";
     lista.forEach(r=>{
@@ -225,16 +192,15 @@ function renderLista(lista){
         div.className="restaurant-item";
         div.innerHTML=`<span>${iconos[r.categoria]||""} ${r.nombre}</span>
                        <button style="background:none;border:none;cursor:pointer;">🗑</button>`;
-        div.querySelector("button").onclick=(e)=>{
+        div.querySelector("button").onclick=async (e)=>{
             e.stopPropagation();
-            if(confirm(`Eliminar ${r.nombre}?`)) db.collection("restaurantes").doc(r.id).delete();
+            if(confirm(`Eliminar ${r.nombre}?`)) await deleteDoc(doc(db,"restaurantes",r.id));
         };
         div.onclick=()=>{ map.setView(r.coords,17); markers[r.id].openPopup(); };
         listEl.appendChild(div);
     });
 }
 
-// Filtros
 function filtrar(){
     const texto=search.value.toLowerCase();
     const cat=categoryFilter.value.toLowerCase();
@@ -242,11 +208,19 @@ function filtrar(){
     cargarMarcadores(filtrados);
     renderLista(filtrados);
 }
+
+// ---------- EVENTOS ----------
 search.oninput=filtrar;
 categoryFilter.oninput=filtrar;
 
-// Geolocalización
-locateBtn.onclick = () => {
+toggleSidebarBtn.onclick=()=>{
+    sidebar.classList.toggle("hidden");
+    const fullMap = sidebar.classList.contains("hidden");
+    map.getContainer().classList.toggle("full", fullMap);
+    setTimeout(()=>map.invalidateSize(),400);
+};
+
+locateBtn.onclick=()=>{
     if(!navigator.geolocation){ alert("Tu navegador no soporta geolocalización"); return; }
     navigator.geolocation.getCurrentPosition(pos=>{
         const latlng=[pos.coords.latitude,pos.coords.longitude];
@@ -256,38 +230,49 @@ locateBtn.onclick = () => {
     },()=>{alert("No se pudo obtener tu ubicación");});
 };
 
-// Firebase tiempo real
-db.collection("restaurantes").onSnapshot(snapshot=>{
-    restaurantes=[];
-    snapshot.forEach(doc=>restaurantes.push({id:doc.id,...doc.data()}));
-    filtrar();
+// Modal estrellas
+Array.from(starContainer.children).forEach(span=>{
+    span.onclick=()=>{
+        ratingSeleccionado=parseInt(span.dataset.value);
+        Array.from(starContainer.children).forEach(s=>s.classList.remove("active"));
+        Array.from(starContainer.children).forEach(s=>{ if(parseInt(s.dataset.value)<=ratingSeleccionado) s.classList.add("active"); });
+    };
 });
 
 // Añadir restaurante
 addBtn.onclick=()=>{ modoAgregar=true; alert("Haz clic en el mapa para colocar el restaurante"); };
-map.on("click",e=>{
+map.on("click",async e=>{
     if(!modoAgregar) return;
     coordsAgregar=[e.latlng.lat,e.latlng.lng];
     modalOverlay.style.display="flex";
 });
 
 // Guardar / cancelar modal
-modalSave.onclick=()=>{
+modalSave.onclick=async ()=>{
     const cat=categoryInput.value||categoryInput.placeholder;
     if(cat && !document.querySelector(`#categorias option[value="${cat}"]`)){
         const opt=document.createElement("option"); opt.value=cat; document.getElementById("categorias").appendChild(opt);
     }
     const nuevo={nombre:modalName.value||"Sin nombre",categoria:cat,descripcion:modalDesc.value,rating:ratingSeleccionado,coords:coordsAgregar};
-    db.collection("restaurantes").add(nuevo);
+    await addDoc(collection(db,"restaurantes"),nuevo);
     modalOverlay.style.display="none";
     modalName.value=""; modalDesc.value=""; ratingSeleccionado=5;
     Array.from(starContainer.children).forEach(s=>s.classList.remove("active"));
     modoAgregar=false;
 };
 modalCancel.onclick=()=>{ modalOverlay.style.display="none"; modoAgregar=false; };
+
+// ---------- FIRESTORE EN TIEMPO REAL ----------
+onSnapshot(collection(db,"restaurantes"), snapshot=>{
+    restaurantes=[];
+    snapshot.forEach(doc=>restaurantes.push({id:doc.id,...doc.data()}));
+    filtrar();
+});
 </script>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 </body>
 </html>
+
 
 
 
