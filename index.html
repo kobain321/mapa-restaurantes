@@ -7,11 +7,12 @@
 <style>
 body { margin:0; display:flex; font-family:"Segoe UI", sans-serif; }
 #sidebar { width:320px; background:linear-gradient(180deg,#fff,#f2f2f2); padding:20px; border-right:1px solid #ddd; overflow-y:auto; }
-#sidebar h2,#sidebar h3 { margin-top:0;color:#e63946; }
+#sidebar h2 { margin-top:0;color:#e63946; }
 input,select,button { width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; margin-bottom:10px; }
 button { cursor:pointer; }
-.restaurant-item { padding:8px; cursor:pointer; border-radius:6px; margin-bottom:6px; }
+.restaurant-item { padding:8px; cursor:pointer; border-radius:6px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; }
 .restaurant-item:hover { background:#e63946; color:white; }
+.restaurant-item span { font-size:18px; margin-left:5px; }
 #map { flex-grow:1; height:100vh; }
 
 /* Botones flotantes */
@@ -23,12 +24,19 @@ button { cursor:pointer; }
 
 /* Modal */
 #modalOverlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:2000; }
-#modal { background:#fff; padding:20px; border-radius:10px; width:300px; box-shadow:0 0 10px #000; }
+#modal { background:#fff; padding:20px; border-radius:12px; width:320px; box-shadow:0 0 20px rgba(0,0,0,0.3); animation:fadeIn 0.3s; }
+@keyframes fadeIn { from {opacity:0; transform:scale(0.9);} to {opacity:1; transform:scale(1);} }
 #modal h3 { margin-top:0; color:#e63946; text-align:center; }
 .modal-input { margin-bottom:10px; width:100%; }
-#starContainer span { font-size:24px; cursor:pointer; }
-#starContainer span:hover, #starContainer span.active { color:#e63946; }
-#modal button { margin-top:10px; }
+#starContainer span, .popup-star { font-size:24px; cursor:pointer; margin-right:3px; transition: transform 0.2s; }
+#starContainer span:hover, #starContainer span.active, .popup-star.active { color:#e63946; transform:scale(1.3); }
+#modal button { margin-top:10px; width:48%; margin-right:2%; }
+#modal button:last-child { margin-right:0; }
+
+/* Popup estilos */
+.popup-content { display:flex; flex-direction:column; font-size:14px; }
+.popup-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
+.popup-icon { font-size:20px; margin-right:5px; }
 </style>
 </head>
 <body>
@@ -39,10 +47,10 @@ button { cursor:pointer; }
 <input type="text" id="search" placeholder="Buscar por nombre">
 <select id="categoryFilter">
     <option value="">Todas</option>
-    <option value="pizza">Pizza</option>
-    <option value="japonesa">Japonesa</option>
-    <option value="tapas">Tapas</option>
-    <option value="hamburguesas">Hamburguesas</option>
+    <option value="pizza">Pizza 🍕</option>
+    <option value="japonesa">Japonesa 🍣</option>
+    <option value="tapas">Tapas 🍤</option>
+    <option value="hamburguesas">Hamburguesas 🍔</option>
 </select>
 
 <hr>
@@ -59,10 +67,10 @@ button { cursor:pointer; }
 <h3>Añadir Restaurante</h3>
 <input id="modalName" class="modal-input" placeholder="Nombre">
 <select id="modalCategory" class="modal-input">
-    <option value="pizza">Pizza</option>
-    <option value="japonesa">Japonesa</option>
-    <option value="tapas">Tapas</option>
-    <option value="hamburguesas">Hamburguesas</option>
+    <option value="pizza">Pizza 🍕</option>
+    <option value="japonesa">Japonesa 🍣</option>
+    <option value="tapas">Tapas 🍤</option>
+    <option value="hamburguesas">Hamburguesas 🍔</option>
 </select>
 <input id="modalDesc" class="modal-input" placeholder="Descripción">
 <div id="starContainer" class="modal-input">
@@ -80,7 +88,6 @@ button { cursor:pointer; }
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-
 <script>
 const firebaseConfig = {
   apiKey: "TU_API_KEY",
@@ -93,9 +100,9 @@ const db = firebase.firestore();
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
-let restaurantes = [];
-const markers = {};
-const map = L.map("map").setView([40.4167,-3.70325],14);
+let restaurantes=[];
+const markers={};
+const map=L.map("map").setView([40.4167,-3.70325],14);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{ attribution:"© OpenStreetMap" }).addTo(map);
 
 const search=document.getElementById("search");
@@ -104,7 +111,6 @@ const listEl=document.getElementById("restaurantList");
 const locateBtn=document.getElementById("locateBtn");
 const addBtn=document.getElementById("addRestaurantBtn");
 
-// Modal elements
 const modalOverlay=document.getElementById("modalOverlay");
 const modalName=document.getElementById("modalName");
 const modalCategory=document.getElementById("modalCategory");
@@ -117,40 +123,81 @@ let modoAgregar=false;
 let coordsAgregar=[0,0];
 let ratingSeleccionado=5;
 
-// Estrellas interactivas
+// Iconos por categoría
+const iconos={
+    pizza:"🍕",
+    japonesa:"🍣",
+    tapas:"🍤",
+    hamburguesas:"🍔"
+};
+
+// Modal estrellas
 Array.from(starContainer.children).forEach(span=>{
     span.onclick=()=>{
         ratingSeleccionado=parseInt(span.dataset.value);
-        Array.from(starContainer.children).forEach(s=>{
-            s.classList.remove("active");
-            if(parseInt(s.dataset.value)<=ratingSeleccionado) s.classList.add("active");
-        });
+        Array.from(starContainer.children).forEach(s=>s.classList.remove("active"));
+        Array.from(starContainer.children).forEach(s=>{ if(parseInt(s.dataset.value)<=ratingSeleccionado) s.classList.add("active"); });
     };
 });
 
-// Funciones
-function estrellasHTML(rating){ let html=""; for(let i=1;i<=5;i++) html+=i<=rating?"⭐":"☆"; return html; }
-
+// Marcar restaurantes
 function cargarMarcadores(lista){
     Object.values(markers).forEach(m=>map.removeLayer(m));
     lista.forEach(r=>{
-        const m=L.marker(r.coords).addTo(map)
-            .bindPopup(`<b>${r.nombre}</b><br>${estrellasHTML(r.rating)}<br><i>${r.categoria}</i><br>${r.descripcion}`);
+        const m=L.marker(r.coords).addTo(map);
+
+        const popup=document.createElement("div");
+        popup.className="popup-content";
+
+        const top=document.createElement("div");
+        top.className="popup-top";
+
+        const nombre=document.createElement("span");
+        nombre.textContent=`${iconos[r.categoria] || ""} ${r.nombre}`;
+        top.appendChild(nombre);
+
+        const starsDiv=document.createElement("div");
+        for(let i=1;i<=5;i++){
+            const s=document.createElement("span");
+            s.innerHTML="☆";
+            s.classList.add("popup-star");
+            if(i<=r.rating) s.classList.add("active");
+            s.dataset.value=i;
+            s.onclick=(e)=>{ 
+                e.stopPropagation(); 
+                db.collection("restaurantes").doc(r.id).update({rating:i});
+            };
+            starsDiv.appendChild(s);
+        }
+        top.appendChild(starsDiv);
+
+        const categoria=document.createElement("i");
+        categoria.textContent=r.categoria;
+        const desc=document.createElement("div");
+        desc.textContent=r.descripcion;
+
+        popup.appendChild(top);
+        popup.appendChild(categoria);
+        popup.appendChild(desc);
+
+        m.bindPopup(popup);
         markers[r.id]=m;
     });
 }
 
+// Lista lateral
 function renderLista(lista){
     listEl.innerHTML="";
     lista.forEach(r=>{
         const div=document.createElement("div");
         div.className="restaurant-item";
-        div.innerHTML=`<b>${r.nombre}</b><br>${estrellasHTML(r.rating)} <small>(${r.categoria})</small>`;
+        div.innerHTML=`<span>${iconos[r.categoria] || ""} ${r.nombre}</span><span>${"⭐".repeat(r.rating)}</span>`;
         div.onclick=()=>{ map.setView(r.coords,17); markers[r.id].openPopup(); };
         listEl.appendChild(div);
     });
 }
 
+// Filtros
 function filtrar(){
     const texto=search.value.toLowerCase();
     const cat=categoryFilter.value;
@@ -162,27 +209,24 @@ function filtrar(){
 search.oninput=filtrar;
 categoryFilter.onchange=filtrar;
 
-// GEOLOCALIZACION
+// Geolocalización
 locateBtn.onclick=()=>{
     navigator.geolocation.getCurrentPosition(pos=>{ map.setView([pos.coords.latitude,pos.coords.longitude],15); },()=>{alert("No se pudo obtener tu ubicación");});
 };
 
-// Cargar desde Firebase
-function cargarDesdeFirebase(){
-    db.collection("restaurantes").onSnapshot(snapshot=>{
-        restaurantes=[];
-        snapshot.forEach(doc=>{ restaurantes.push({id:doc.id,...doc.data()}); });
-        filtrar();
-    });
-}
+// Firebase en tiempo real
+db.collection("restaurantes").onSnapshot(snapshot=>{
+    restaurantes=[];
+    snapshot.forEach(doc=>restaurantes.push({id:doc.id,...doc.data()}));
+    filtrar();
+});
 
-// Botón agregar
+// Agregar restaurante
 addBtn.onclick=()=>{
     modoAgregar=true;
     alert("Haz clic en el mapa para colocar el restaurante");
 };
 
-// Click en mapa para agregar
 map.on("click",e=>{
     if(!modoAgregar) return;
     coordsAgregar=[e.latlng.lat,e.latlng.lng];
@@ -205,16 +249,10 @@ modalSave.onclick=()=>{
     modoAgregar=false;
 };
 
-modalCancel.onclick=()=>{
-    modalOverlay.style.display="none";
-    modoAgregar=false;
-};
-
-// INIT
-cargarDesdeFirebase();
+modalCancel.onclick=()=>{ modalOverlay.style.display="none"; modoAgregar=false; };
 </script>
-
 </body>
 </html>
+
 
 
