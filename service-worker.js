@@ -1,4 +1,4 @@
-const CACHE = "restaurantes-cache-v1";
+const CACHE = "restaurantes-cache-v2";
 const FILES = [
   "index.html",
   "manifest.json",
@@ -18,3 +18,4 @@ self.addEventListener("fetch", e => {
     caches.match(e.request).then(resp => resp || fetch(e.request))
   );
 });
+
